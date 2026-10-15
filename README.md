@@ -91,3 +91,9 @@ Verified end to end on signed VOD fixtures: native tests pass, and in the browse
 - [ ] Web Worker wrapper
 - [x] Policy option: block vs. annotate unverified segments (`policy: 'block'`)
 - [x] Trust anchors option for `verifySegment` (`Trusted` state)
+
+## License
+
+[MIT](LICENSE).
+
+The test signing certificates in `tests/fixtures/certs/` come from [c2pa-rs](https://github.com/contentauth/c2pa-rs) (MIT OR Apache-2.0). They are for testing only.
