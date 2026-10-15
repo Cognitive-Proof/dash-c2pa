@@ -22,13 +22,24 @@
 <h1>dash-c2pa demo</h1>
 <p>Each media segment is checked with C2PA (c2pa-rs in wasm) against its init segment before dash.js buffers it.</p>
 <nav>
-  <a href="?stream=signed">Signed stream</a>
-  <a href="?stream=tampered">Tampered stream (video seg-3 mdat corrupted)</a>
+  Stream:
+  <a data-stream="signed">Signed</a>
+  <a data-stream="tampered">Tampered (video seg-3 mdat corrupted)</a>
+</nav>
+<nav>
+  Policy:
+  <a data-policy="annotate">Annotate (buffer everything)</a>
+  <a data-policy="block">Block Invalid segments</a>
+</nav>
+<nav>
+  Trust:
+  <a data-trust="none">No trust anchors</a>
+  <a data-trust="test">c2pa-rs test root</a>
 </nav>
 <p id="status">Loading…</p>
 <video id="video" controls muted></video>
 <table>
-  <thead><tr><th>Track</th><th>Segment</th><th>State</th><th>Detail</th></tr></thead>
+  <thead><tr><th>Track</th><th>Segment</th><th>State</th><th>Action</th><th>Detail</th></tr></thead>
   <tbody id="results"></tbody>
 </table>
 
@@ -36,15 +47,31 @@
 <script type="module">
 import { attachC2paVerifier } from '../examples/interceptor.js';
 
-const stream = new URLSearchParams(location.search).get('stream') === 'tampered' ? 'tampered' : 'signed';
-document.querySelector(`nav a[href="?stream=${stream}"]`).classList.add('current');
+const params = new URLSearchParams(location.search);
+const pick = (name, values) => (values.includes(params.get(name)) ? params.get(name) : values[0]);
+const options = {
+    stream: pick('stream', ['signed', 'tampered']),
+    policy: pick('policy', ['annotate', 'block']),
+    trust: pick('trust', ['none', 'test']),
+};
+for (const [name, value] of Object.entries(options)) {
+    for (const a of document.querySelectorAll(`nav a[data-${name}]`)) {
+        const next = new URLSearchParams({ ...options, [name]: a.dataset[name] });
+        a.href = `?${next}`;
+        a.classList.toggle('current', a.dataset[name] === value);
+    }
+}
+const { stream, policy } = options;
+const trustAnchors = options.trust === 'test'
+    ? await (await fetch('../tests/fixtures/certs/test_cert_root_bundle.pem')).text()
+    : undefined;
 
 const status = document.getElementById('status');
 const tbody = document.getElementById('results');
 // Exposed for automated checks.
 window.c2paResults = [];
 
-// signingCredential.untrusted is expected for the test cert and does not make the state Invalid.
+// signingCredential.untrusted is expected without trust anchors and does not make the state Invalid.
 const FAILURE = /\.(mismatch|malformed|invalid|missing|revoked|expired)$/;
 
 function addRow(result) {
@@ -62,12 +89,12 @@ function addRow(result) {
             ? failures.map((s) => `${s.code}: ${s.explanation ?? ''}`).join('; ')
             : `${active?.title ?? ''} — signed by ${active?.signature_info?.common_name ?? '?'}`;
         if (statuses.some((s) => s.code === 'signingCredential.untrusted')) {
-            detail += ' (test cert, not on a trust list)';
+            detail += ' (signer not on a trust list)';
         }
     }
     const ok = result.state === 'Valid' || result.state === 'Trusted';
     tr.className = ok ? 'ok' : 'bad';
-    for (const text of [result.key, segment, result.state ?? 'Error', detail]) {
+    for (const text of [result.key, segment, result.state ?? 'Error', result.blocked ? 'blocked' : 'buffered', detail]) {
         const td = document.createElement('td');
         td.textContent = text;
         tr.appendChild(td);
@@ -77,10 +104,16 @@ function addRow(result) {
 }
 
 const player = dashjs.MediaPlayer().create();
-await attachC2paVerifier(player, addRow);
+await attachC2paVerifier(player, addRow, { policy, trustAnchors });
+// Exposed for automated checks.
+window.dashErrors = [];
+player.on(dashjs.MediaPlayer.events.ERROR, (e) => {
+    window.dashErrors.push({ code: e.error?.code, message: e.error?.message });
+});
 player.initialize(document.getElementById('video'), `../tests/fixtures/${stream}/stream.mpd`, true);
-player.on(dashjs.MediaPlayer.events.PLAYBACK_ENDED, () => { status.textContent = `Playback ended (${stream}).`; });
-status.textContent = `Playing ${stream} stream.`;
+const label = `${stream} stream, ${policy} policy, trust: ${options.trust}`;
+player.on(dashjs.MediaPlayer.events.PLAYBACK_ENDED, () => { status.textContent = `Playback ended (${label}).`; });
+status.textContent = `Playing ${label}.`;
 </script>
 </body>
 </html>
