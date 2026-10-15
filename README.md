@@ -58,6 +58,19 @@ Open <http://localhost:8765/demo/>. [`demo/index.html`](demo/index.html) plays t
 - Tampered, `policy=annotate`: video `seg-3` reports `Invalid` with `assertion.bmffHash.mismatch` and is still buffered. dash.js then hits `MEDIA_ERR_DECODE`, keeps resetting the MediaSource and refetching segments, and playback never starts.
 - Tampered, `policy=block`: video `seg-3` is `Invalid` and blocked. No player errors; playback skips the 1 s hole and reaches the end.
 
+### Manifest panels
+
+Above the table, the demo shows one [`c2pa-react-component`](https://www.npmjs.com/package/c2pa-react-component) `<C2paManifest>` panel per track (video, audio). React 19, `@xyflow/react` 12 and `c2pa-react-component@0.1.22` load from esm.sh through an import map, so there is still no build step. If the CDN fails, the table keeps working.
+
+- [`demo/to-verification-outcome.js`](demo/to-verification-outcome.js) converts a `verifySegment` result (c2pa-rs `Reader::json()`) into the component's `VerificationOutcome`:
+  - snake_case manifest keys become camelCase.
+  - Assertions become a record keyed by label.
+  - `state` becomes a boolean.
+  - The per-segment Merkle hash lists in `c2pa.hash.bmff.v3` are replaced by a count.
+  - `Trusted` maps to `validation_state: 'Valid'`, because the component only knows `Valid` / `Invalid` / `Unknown`. The panel heading still shows `Trusted`.
+- [`demo/manifest-panels.js`](demo/manifest-panels.js) renders the panels. Each panel shows the latest segment's result. Once a segment is not valid, the panel holds on it, because dash.js fetches segments in bursts and the next result would replace it within milliseconds. A strip of segment buttons selects any earlier result, and "Follow latest" releases the hold. On the tampered stream, the video panel shows the `Invalid` badge and `assertion.bmffHash.mismatch` at `seg-3`.
+- The detail level defaults to 4. In 0.1.22, only levels 3 and 4 show the validation state. Level 1 exposes it only in its `aria-label`, and level 2 never shows the invalid card, because `C2paManifest` does not pass `officialList` through.
+
 ## Findings (dash.js 5.2.x, c2pa 0.91.2, Oct 2026)
 
 - No formal plugin registry in dash.js; extension points are `extend()`, request/response interceptors, custom ABR rules, DRM filters, capability filters, and events. Response interceptors are the right fit.
@@ -74,6 +87,7 @@ Verified end to end on signed VOD fixtures: native tests pass, and in the browse
 - [x] Signed fMP4 test fixtures (`Builder::sign_fragmented_files`, `scripts/make-fixtures.sh`)
 - [x] Native tests: valid, tampered, unsigned, and trusted segments (`tests/verify.rs`)
 - [x] Browser test with dash.js (`demo/index.html`)
+- [x] Per-track manifest panels with `c2pa-react-component` (`demo/manifest-panels.js`)
 - [ ] Web Worker wrapper
 - [x] Policy option: block vs. annotate unverified segments (`policy: 'block'`)
 - [x] Trust anchors option for `verifySegment` (`Trusted` state)

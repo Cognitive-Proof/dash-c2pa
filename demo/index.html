@@ -16,7 +16,36 @@
   tr.ok td.state { color: #1a7f37; }
   tr.bad td.state { color: #cf222e; }
   code { font-size: 0.85em; }
+  .panels { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1rem; margin-top: 0.5rem; }
+  .panels.wide { grid-template-columns: 1fr; }
+  .panel { border: 1px solid #8884; border-radius: 8px; padding: 0.75rem; min-width: 0; overflow-x: auto; }
+  .panel h3 { margin: 0 0 0.5rem; font-size: 1rem; }
+  .panel h3 .seg { font-weight: normal; opacity: 0.75; }
+  .panel[data-state="Invalid"] h3 .seg, .panel[data-state="Error"] h3 .seg { color: #cf222e; opacity: 1; }
+  .panel .c2pa-host { background: #fff; color: #1f2328; color-scheme: light; border-radius: 6px; padding: 0.5rem; }
+  .panel .error { color: #cf222e; }
+  .strip-label { font-size: 0.8rem; opacity: 0.8; margin: 0.5rem 0 0.25rem; }
+  .strip { display: flex; flex-wrap: wrap; gap: 2px; }
+  .strip button { font: inherit; font-size: 0.7rem; min-width: 1.6rem; padding: 1px 3px; border: 1px solid transparent; border-radius: 3px; cursor: pointer; color: #fff; }
+  .strip button.ok { background: #1a7f37; }
+  .strip button.bad { background: #cf222e; }
+  .strip button.current { outline: 2px solid CanvasText; }
+  .level { font-size: 0.9rem; }
 </style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xyflow/react@12.11.6/dist/style.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/c2pa-react-component@0.1.22/dist/c2pa-react-component.css">
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@19.2.9",
+    "react/jsx-runtime": "https://esm.sh/react@19.2.9/jsx-runtime",
+    "react-dom": "https://esm.sh/react-dom@19.2.9?external=react",
+    "react-dom/client": "https://esm.sh/react-dom@19.2.9/client?external=react,react-dom",
+    "@xyflow/react": "https://esm.sh/@xyflow/react@12.11.6?external=react,react-dom",
+    "c2pa-react-component": "https://esm.sh/c2pa-react-component@0.1.22?external=react,react-dom,@xyflow/react"
+  }
+}
+</script>
 </head>
 <body>
 <h1>dash-c2pa demo</h1>
@@ -38,6 +67,9 @@
 </nav>
 <p id="status">Loading…</p>
 <video id="video" controls muted></video>
+<h2>Manifest per track</h2>
+<div id="panels"><p>Loading manifest viewer…</p></div>
+<h2>Segments</h2>
 <table>
   <thead><tr><th>Track</th><th>Segment</th><th>State</th><th>Action</th><th>Detail</th></tr></thead>
   <tbody id="results"></tbody>
@@ -74,7 +106,17 @@ window.c2paResults = [];
 // signingCredential.untrusted is expected without trust anchors and does not make the state Invalid.
 const FAILURE = /\.(mismatch|malformed|invalid|missing|revoked|expired)$/;
 
+// The React panels load from a CDN; the table works without them.
+let showInPanels = () => {};
+try {
+    const { mountManifestPanels } = await import('./manifest-panels.js');
+    showInPanels = mountManifestPanels(document.getElementById('panels'));
+} catch (e) {
+    document.getElementById('panels').textContent = `Manifest viewer failed to load: ${e}`;
+}
+
 function addRow(result) {
+    showInPanels(result);
     window.c2paResults.push(result);
     const tr = document.createElement('tr');
     const segment = result.url.split('/').slice(-2).join('/');
