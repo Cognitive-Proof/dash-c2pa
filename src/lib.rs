@@ -20,10 +20,15 @@ struct SegmentResult {
 ///
 /// `format` is the MIME type, e.g. `video/mp4`.
 #[wasm_bindgen(js_name = verifySegment)]
-pub async fn verify_segment(format: String, init: Vec<u8>, segment: Vec<u8>) -> Result<JsValue, JsError> {
-    let reader = c2pa::Reader::from_fragment_async(&format, Cursor::new(init), Cursor::new(segment))
-        .await
-        .map_err(|e| JsError::new(&e.to_string()))?;
+pub async fn verify_segment(
+    format: String,
+    init: Vec<u8>,
+    segment: Vec<u8>,
+) -> Result<JsValue, JsError> {
+    let reader =
+        c2pa::Reader::from_fragment_async(&format, Cursor::new(init), Cursor::new(segment))
+            .await
+            .map_err(|e| JsError::new(&e.to_string()))?;
 
     let result = SegmentResult {
         state: format!("{:?}", reader.validation_state()),

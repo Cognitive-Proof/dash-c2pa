@@ -1,7 +1,7 @@
 // dash.js response interceptor that verifies each fMP4 media segment with C2PA.
 //
 // Build the wasm package first:  wasm-pack build --target web --release
-// Not yet tested against signed content; see README "Status".
+// Tested with dash.js 5.2.1 in demo/index.html.
 
 import init, { verifySegment } from '../pkg/dash_c2pa.js';
 
@@ -20,7 +20,9 @@ export async function attachC2paVerifier(player, onResult) {
 
     player.addResponseInterceptor(async (response) => {
         const req = response.request?.customData?.request;
-        if (!req || !(response.data instanceof ArrayBuffer)) {
+        // Aborted requests also pass through interceptors, with partial data.
+        const ok = response.status >= 200 && response.status <= 299;
+        if (!req || !ok || !(response.data instanceof ArrayBuffer)) {
             return response;
         }
 

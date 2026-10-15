@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dash-c2pa demo</title>
+<style>
+  :root { color-scheme: light dark; font-family: system-ui, sans-serif; }
+  body { max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
+  video { width: 100%; max-width: 640px; background: #000; display: block; }
+  nav a { margin-right: 1rem; }
+  nav a.current { font-weight: bold; }
+  table { border-collapse: collapse; width: 100%; margin-top: 1rem; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.3rem 0.6rem; border-bottom: 1px solid #8884; vertical-align: top; }
+  td.state { font-weight: bold; }
+  tr.ok td.state { color: #1a7f37; }
+  tr.bad td.state { color: #cf222e; }
+  code { font-size: 0.85em; }
+</style>
+</head>
+<body>
+<h1>dash-c2pa demo</h1>
+<p>Each media segment is checked with C2PA (c2pa-rs in wasm) against its init segment before dash.js buffers it.</p>
+<nav>
+  <a href="?stream=signed">Signed stream</a>
+  <a href="?stream=tampered">Tampered stream (video seg-3 mdat corrupted)</a>
+</nav>
+<p id="status">Loading…</p>
+<video id="video" controls muted></video>
+<table>
+  <thead><tr><th>Track</th><th>Segment</th><th>State</th><th>Detail</th></tr></thead>
+  <tbody id="results"></tbody>
+</table>
+
+<script src="https://cdn.jsdelivr.net/npm/dashjs@5.2.1/dist/modern/umd/dash.all.min.js"></script>
+<script type="module">
+import { attachC2paVerifier } from '../examples/interceptor.js';
+
+const stream = new URLSearchParams(location.search).get('stream') === 'tampered' ? 'tampered' : 'signed';
+document.querySelector(`nav a[href="?stream=${stream}"]`).classList.add('current');
+
+const status = document.getElementById('status');
+const tbody = document.getElementById('results');
+// Exposed for automated checks.
+window.c2paResults = [];
+
+// signingCredential.untrusted is expected for the test cert and does not make the state Invalid.
+const FAILURE = /\.(mismatch|malformed|invalid|missing|revoked|expired)$/;
+
+function addRow(result) {
+    window.c2paResults.push(result);
+    const tr = document.createElement('tr');
+    const segment = result.url.split('/').slice(-2).join('/');
+    let detail;
+    if (result.error) {
+        detail = result.error;
+    } else {
+        const statuses = result.manifest.validation_status ?? [];
+        const failures = statuses.filter((s) => FAILURE.test(s.code));
+        const active = result.manifest.manifests?.[result.manifest.active_manifest];
+        detail = failures.length
+            ? failures.map((s) => `${s.code}: ${s.explanation ?? ''}`).join('; ')
+            : `${active?.title ?? ''} — signed by ${active?.signature_info?.common_name ?? '?'}`;
+        if (statuses.some((s) => s.code === 'signingCredential.untrusted')) {
+            detail += ' (test cert, not on a trust list)';
+        }
+    }
+    const ok = result.state === 'Valid' || result.state === 'Trusted';
+    tr.className = ok ? 'ok' : 'bad';
+    for (const text of [result.key, segment, result.state ?? 'Error', detail]) {
+        const td = document.createElement('td');
+        td.textContent = text;
+        tr.appendChild(td);
+    }
+    tr.children[2].className = 'state';
+    tbody.appendChild(tr);
+}
+
+const player = dashjs.MediaPlayer().create();
+await attachC2paVerifier(player, addRow);
+player.initialize(document.getElementById('video'), `../tests/fixtures/${stream}/stream.mpd`, true);
+player.on(dashjs.MediaPlayer.events.PLAYBACK_ENDED, () => { status.textContent = `Playback ended (${stream}).`; });
+status.textContent = `Playing ${stream} stream.`;
+</script>
+</body>
+</html>
