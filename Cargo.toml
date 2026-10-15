@@ -1,0 +1,23 @@
+[package]
+name = "dash-c2pa"
+description = "C2PA verification of fragmented MP4 DASH segments in the browser, for dash.js"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.96"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+c2pa = { version = "0.91", default-features = false, features = ["rust_native_crypto"] }
+serde-wasm-bindgen = "0.6"
+serde = { version = "1", features = ["derive"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+strip = true
